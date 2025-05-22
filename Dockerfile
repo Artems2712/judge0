@@ -3,6 +3,9 @@
 # ----------------------------
 FROM judge0/compilers:1.4.0 AS base
 
+# Явно работаем от root, чтобы все apt-get / gem / npm шли в привилегированном контексте
+USER root
+
 ENV JUDGE0_HOMEPAGE="https://judge0.com" \
     JUDGE0_SOURCE_CODE="https://github.com/judge0/judge0" \
     JUDGE0_MAINTAINER="Herman Zvonimir Došilović <hermanz.dosilovic@gmail.com>" \
@@ -13,7 +16,7 @@ LABEL homepage=$JUDGE0_HOMEPAGE \
       source_code=$JUDGE0_SOURCE_CODE \
       maintainer=$JUDGE0_MAINTAINER
 
-# Устанавливаем только нужные пакеты (cron, libpq-dev для pg, aglio)
+# Устанавливаем необходимые пакеты и инструменты от root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       cron \
@@ -25,26 +28,25 @@ RUN apt-get update && \
 
 WORKDIR /api
 
-# Копируем Gemfile и собираем гемы
+# Ставим гемы
 COPY Gemfile* ./
 RUN bundle install --jobs 4
 
-# Копируем расписание cron и устанавливаем его
+# Копируем cron и подключаем его
 COPY cron /etc/cron.d
 RUN chmod 0644 /etc/cron.d/* && \
     crontab /etc/cron.d/*
 
-# Копируем всю логику приложения
+# Копируем весь исходный код
 COPY . .
 
-# Создаём системного пользователя judge0 и даём ему права на /api
+# Создаём системного пользователя и даём ему права на /api
 RUN useradd -u 1000 -m -r judge0 && \
     chown -R judge0:judge0 /api
 
-# Переключаемся на непользователя
+# После этого переключаемся на непользователя
 USER judge0
 
-# Точка входа и команда по-умолчанию
 ENTRYPOINT ["/api/docker-entrypoint.sh"]
 CMD ["/api/scripts/server"]
 
@@ -53,5 +55,5 @@ CMD ["/api/scripts/server"]
 # ----------------------------
 FROM base AS development
 
-# Для разработки просто «заснули», чтобы можно было «exec» внутрь
+# Чтобы можно было заходить внутрь и отлаживать
 CMD ["sleep", "infinity"]
